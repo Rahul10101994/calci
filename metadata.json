@@ -1,0 +1,5 @@
+{
+  "name": "GenCalc Pro",
+  "description": "A high-precision scientific calculator integrated with Gemini AI for natural language math solving and complex reasoning.",
+  "requestFramePermissions": []
+}
