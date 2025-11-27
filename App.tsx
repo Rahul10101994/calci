@@ -6,31 +6,41 @@ import { History } from './components/History';
 import { AIPanel } from './components/AIPanel';
 import { Calculator, History as HistoryIcon, Sparkles, FlaskConical, Delete } from 'lucide-react';
 
-const safeCalculate = (expr: string): string => {
+const safeCalculate = (expr: string, isRadians: boolean): string => {
   try {
-    // Sanitize: Allow only numbers, operators, parens, and Math functions
-    // Replace 'pi' with Math.PI, 'e' with Math.E
+    // Sanitize: Allow only numbers, operators, parens, and known function names
+    // We do NOT replace sin/cos strings here, we pass them as variables to the function scope
+    // This avoids regex issues and partial matches (like log vs log10)
     let cleanExpr = expr
       .replace(/×/g, '*')
       .replace(/÷/g, '/')
       .replace(/pi/g, 'Math.PI')
       .replace(/\be\b/g, 'Math.E')
-      .replace(/sin\(/g, 'Math.sin(')
-      .replace(/cos\(/g, 'Math.cos(')
-      .replace(/tan\(/g, 'Math.tan(')
-      .replace(/log\(/g, 'Math.log(') // ln
-      .replace(/log10\(/g, 'Math.log10(')
-      .replace(/sqrt\(/g, 'Math.sqrt(')
-      .replace(/abs\(/g, 'Math.abs(')
       .replace(/\^/g, '**');
 
-    // Very basic validation to prevent execution of arbitrary code
-    if (/[^0-9+\-*/().\sMathPIE%**,]/g.test(cleanExpr)) {
+    // Basic validation to prevent arbitrary code execution
+    // Allow digits, operators, parens, dot, whitespace, and letters (for function names)
+    if (/[^0-9+\-*/().\s a-z%**,]/gi.test(cleanExpr)) {
         return "Error";
     }
 
-    // eslint-disable-next-line no-new-func
-    const result = new Function(`return ${cleanExpr}`)();
+    // Define Math functions with Angle Mode support
+    const sin = (x: number) => isRadians ? Math.sin(x) : Math.sin(x * Math.PI / 180);
+    const cos = (x: number) => isRadians ? Math.cos(x) : Math.cos(x * Math.PI / 180);
+    const tan = (x: number) => isRadians ? Math.tan(x) : Math.tan(x * Math.PI / 180);
+    const log = Math.log;   // ln
+    const log10 = Math.log10; // log base 10
+    const sqrt = Math.sqrt;
+    const abs = Math.abs;
+
+    // Create a function with restricted scope, passing our safe math functions
+    const func = new Function(
+      'sin', 'cos', 'tan', 'log', 'log10', 'sqrt', 'abs',
+      `return ${cleanExpr}`
+    );
+    
+    // Execute
+    const result = func(sin, cos, tan, log, log10, sqrt, abs);
     
     if (!isFinite(result) || isNaN(result)) return "Error";
     
@@ -46,9 +56,9 @@ export default function App() {
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showSidebar, setShowSidebar] = useState(false); // For mobile toggle
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [isRadians, setIsRadians] = useState(true);
 
-  // Handle window resize to auto-show sidebar on large screens
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -58,7 +68,7 @@ export default function App() {
       }
     };
     window.addEventListener('resize', handleResize);
-    handleResize(); // Init
+    handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -69,7 +79,7 @@ export default function App() {
         setResult('');
       } else if (value === '=') {
         if (!expression) return;
-        const calcResult = safeCalculate(expression);
+        const calcResult = safeCalculate(expression, isRadians);
         setResult(calcResult);
         
         if (calcResult !== 'Error') {
@@ -82,29 +92,27 @@ export default function App() {
           };
           setHistory(prev => [newItem, ...prev].slice(0, 50));
         }
+      } else if (value === 'toggle_rad') {
+        setIsRadians(prev => !prev);
       }
     } else {
-      // Auto-clear previous result if starting new calculation with a number,
-      // but append if starting with operator
       if (result && type === 'number' && !expression) {
-         setResult(''); // Visual clear
+         setResult('');
       }
       
-      // If result exists and we press operator, use result as start of new expr
       if (result && !expression && (type === 'operator' || type === 'function')) {
         setExpression(result + value);
         setResult('');
         return;
       }
 
-      // Reset result visual if we start typing new expression
       if (result && expression === '') {
          setResult('');
       }
 
       setExpression(prev => prev + value);
     }
-  }, [expression, result]);
+  }, [expression, result, isRadians]);
 
   const handleHistorySelect = (item: HistoryItem) => {
     if (item.type === 'calculation') {
@@ -114,7 +122,6 @@ export default function App() {
   };
 
   const handleAIResult = (query: string, answer: string) => {
-      // We don't necessarily set expression/result for AI, but add to history
       const newItem: HistoryItem = {
           id: Date.now().toString(),
           expression: query,
@@ -128,10 +135,9 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center p-4 gap-4 font-sans bg-[#0b0f19]">
       
-      {/* Main Calculator Container */}
       <div className="w-full max-w-md flex flex-col gap-4 z-10">
         
-        {/* Header / Mode Switcher */}
+        {/* Header */}
         <div className="flex items-center justify-between bg-gray-900/80 backdrop-blur-md p-2 rounded-2xl border border-gray-800 shadow-lg">
            <div className="flex gap-1">
               <button 
@@ -170,10 +176,13 @@ export default function App() {
            </div>
         </div>
 
-        {/* Display Area */}
-        <Display expression={expression} result={result} />
+        <Display 
+          expression={expression} 
+          result={result} 
+          isRadians={isRadians}
+          showMode={mode === CalculatorMode.SCIENTIFIC}
+        />
         
-        {/* Keypad or AI View */}
         {mode === CalculatorMode.AI ? (
            <div className="h-[450px] sm:h-[500px]">
               <AIPanel onResult={handleAIResult} />
@@ -186,7 +195,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Sidebar (History/Info) */}
       <div className={`
           fixed inset-y-0 right-0 w-80 bg-[#0b0f19]/95 backdrop-blur-xl border-l border-gray-800 p-4 transform transition-transform duration-300 z-20
           lg:relative lg:translate-x-0 lg:bg-transparent lg:border-none lg:w-80 lg:h-[700px] lg:block
@@ -207,7 +215,6 @@ export default function App() {
          />
       </div>
 
-      {/* Overlay for mobile sidebar */}
       {showSidebar && (
         <div 
           className="fixed inset-0 bg-black/50 z-10 lg:hidden backdrop-blur-sm"

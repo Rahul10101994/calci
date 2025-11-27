@@ -30,7 +30,7 @@ export const SCIENTIFIC_KEYS: ButtonConfig[] = [
   { label: 'sin', value: 'sin(', type: 'function', className: 'text-emerald-400 text-sm' },
   { label: 'cos', value: 'cos(', type: 'function', className: 'text-emerald-400 text-sm' },
   { label: 'tan', value: 'tan(', type: 'function', className: 'text-emerald-400 text-sm' },
-  { label: 'deg', value: 'deg', type: 'function', className: 'text-gray-400 text-xs' }, // Placeholder for mode toggle logic if extended
+  { label: 'deg', value: 'toggle_rad', type: 'action', className: 'text-gray-400 text-xs font-mono' },
 
   { label: 'ln', value: 'log(', type: 'function', className: 'text-emerald-400 text-sm' },
   { label: 'log', value: 'log10(', type: 'function', className: 'text-emerald-400 text-sm' },
